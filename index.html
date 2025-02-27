@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>位置查询</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>位置查询</h1>
+        <div class="card">
+            <div class="location-info">
+                <p id="status">等待获取位置信息...</p>
+                <div id="location-details" class="hidden">
+                    <p><strong>纬度:</strong> <span id="latitude"></span></p>
+                    <p><strong>经度:</strong> <span id="longitude"></span></p>
+                    <p><strong>精确度:</strong> <span id="accuracy"></span> 米</p>
+                    <p><strong>地址:</strong> <span id="address">正在获取地址信息...</span></p>
+                </div>
+            </div>
+            <div class="actions">
+                <button id="get-location" class="btn primary">获取我的位置</button>
+                <button id="refresh-location" class="btn secondary hidden">刷新位置</button>
+            </div>
+        </div>
+        <div id="map" class="hidden"></div>
+        <div class="error-message" id="error-message"></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
