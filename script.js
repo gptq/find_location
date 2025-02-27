@@ -11,9 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorMessageElement = document.getElementById('error-message');
     const mapElement = document.getElementById('map');
 
-    // 初始化地图变量
-    let map;
-    let marker;
+    // 全局变量存储位置信息
+    let currentLatitude = null;
+    let currentLongitude = null;
 
     // 获取位置的函数
     function getLocation() {
@@ -36,6 +36,10 @@ document.addEventListener('DOMContentLoaded', () => {
             (position) => {
                 const { latitude, longitude, accuracy } = position.coords;
                 
+                // 保存当前位置
+                currentLatitude = latitude;
+                currentLongitude = longitude;
+                
                 // 显示位置详情
                 latitudeElement.textContent = latitude.toFixed(6);
                 longitudeElement.textContent = longitude.toFixed(6);
@@ -48,11 +52,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 locationDetails.classList.remove('hidden');
                 refreshLocationBtn.classList.remove('hidden');
                 
-                // 获取地址
-                getAddressFromCoordinates(latitude, longitude);
+                // 显示百度地图
+                showBaiduMap(latitude, longitude);
                 
-                // 显示地图
-                showMap(latitude, longitude);
+                // 尝试使用IP地址获取大致位置信息
+                getApproximateLocation();
             },
             // 错误回调
             (error) => {
@@ -71,6 +75,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         errorMessage = '获取位置时发生未知错误。';
                 }
                 showError(errorMessage);
+                
+                // 如果获取精确位置失败，尝试使用IP地址获取大致位置
+                getApproximateLocation();
             },
             // 选项
             {
@@ -81,86 +88,93 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
-    // 使用反向地理编码API获取地址
-    function getAddressFromCoordinates(latitude, longitude) {
+    // 使用IP地址获取大致位置信息
+    function getApproximateLocation() {
         addressElement.textContent = '正在获取地址信息...';
         
-        // 使用OpenStreetMap的Nominatim服务进行反向地理编码
-        // 注意：在生产环境中，应该使用自己的API密钥和适当的服务
-        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`;
-        
-        fetch(url, {
-            headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'LocationFinderApp' // 添加用户代理以遵守Nominatim使用政策
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('获取地址信息失败');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data && data.display_name) {
-                addressElement.textContent = data.display_name;
-            } else {
-                addressElement.textContent = '无法获取详细地址';
-            }
-        })
-        .catch(error => {
-            console.error('获取地址时出错:', error);
-            addressElement.textContent = '获取地址信息失败，请稍后再试';
-        });
+        // 使用ipinfo.io的免费API获取基于IP的位置信息
+        fetch('https://ipinfo.io/json')
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.city && data.region && data.country) {
+                    const address = `${data.city}, ${data.region}, ${data.country}`;
+                    addressElement.textContent = `大致位置: ${address}`;
+                    
+                    // 如果没有精确位置，使用IP位置显示地图
+                    if (!currentLatitude && !currentLongitude && data.loc) {
+                        const [lat, lon] = data.loc.split(',');
+                        if (lat && lon) {
+                            currentLatitude = parseFloat(lat);
+                            currentLongitude = parseFloat(lon);
+                            showBaiduMap(currentLatitude, currentLongitude);
+                        }
+                    }
+                } else {
+                    addressElement.textContent = '无法获取位置信息';
+                }
+            })
+            .catch(error => {
+                console.error('获取IP位置信息失败:', error);
+                addressElement.textContent = '无法获取位置信息';
+            });
     }
 
-    // 显示地图
-    function showMap(latitude, longitude) {
-        // 检查是否已加载地图脚本
-        if (typeof L === 'undefined') {
-            // 如果没有加载Leaflet库，则加载它
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/leaflet@1.7.1/dist/leaflet.js';
-            script.integrity = 'sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA==';
-            script.crossOrigin = '';
-            
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = 'https://unpkg.com/leaflet@1.7.1/dist/leaflet.css';
-            link.integrity = 'sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A==';
-            link.crossOrigin = '';
-            
-            document.head.appendChild(link);
-            document.body.appendChild(script);
-            
-            script.onload = () => {
-                initMap(latitude, longitude);
-            };
-        } else {
-            initMap(latitude, longitude);
-        }
-    }
-
-    // 初始化地图
-    function initMap(latitude, longitude) {
+    // 显示百度地图
+    function showBaiduMap(latitude, longitude) {
         mapElement.classList.remove('hidden');
+        mapElement.innerHTML = '';
         
-        // 如果地图已经初始化，则更新位置
-        if (map) {
-            map.setView([latitude, longitude], 15);
-            marker.setLatLng([latitude, longitude]);
-        } else {
-            // 初始化地图
-            map = L.map('map').setView([latitude, longitude], 15);
+        // 创建地图容器
+        const mapContainer = document.createElement('div');
+        mapContainer.id = 'baiduMap';
+        mapContainer.style.width = '100%';
+        mapContainer.style.height = '400px';
+        mapContainer.style.borderRadius = '8px';
+        mapContainer.style.border = '1px solid #ddd';
+        
+        mapElement.appendChild(mapContainer);
+        
+        // 创建百度地图脚本
+        const script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.src = 'https://api.map.baidu.com/api?v=2.0&callback=initBaiduMap';
+        document.body.appendChild(script);
+        
+        // 初始化百度地图的全局函数
+        window.initBaiduMap = function() {
+            // 创建百度地图实例
+            const map = new BMap.Map('baiduMap');
             
-            // 添加地图图层
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
+            // 坐标转换（WGS84坐标系转换为百度坐标系）
+            const point = new BMap.Point(longitude, latitude);
             
-            // 添加标记
-            marker = L.marker([latitude, longitude]).addTo(map);
-        }
+            // 初始化地图，设置中心点坐标和地图级别
+            map.centerAndZoom(point, 15);
+            
+            // 添加地图控件
+            map.addControl(new BMap.NavigationControl());  // 添加平移缩放控件
+            map.addControl(new BMap.ScaleControl());       // 添加比例尺控件
+            map.addControl(new BMap.OverviewMapControl()); // 添加缩略地图控件
+            map.enableScrollWheelZoom();                   // 启用滚轮放大缩小
+            
+            // 添加标记点
+            const marker = new BMap.Marker(point);
+            map.addOverlay(marker);
+            
+            // 添加信息窗口
+            const infoWindow = new BMap.InfoWindow('您的位置', {
+                width: 200,
+                height: 60,
+                title: '当前位置'
+            });
+            
+            marker.addEventListener('click', function() {
+                this.openInfoWindow(infoWindow);
+            });
+            
+            // 自动打开信息窗口
+            marker.openInfoWindow(infoWindow);
+        };
     }
 
     // 显示错误信息
